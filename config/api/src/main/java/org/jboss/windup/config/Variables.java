@@ -58,6 +58,14 @@ public class Variables
     }
 
     /**
+     * Push the given {@link Variables} layer on top of the stack.
+     */
+    public void push(Map<String, Iterable<WindupVertexFrame>> frame)
+    {
+        deque.push(frame);
+    }
+
+    /**
      * Remove the top {@link Variables} layer from the the stack.
      */
     public Map<String, Iterable<WindupVertexFrame>> pop()

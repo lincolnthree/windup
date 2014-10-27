@@ -56,6 +56,7 @@ import org.ocpsoft.rewrite.param.ConfigurableParameter;
 import org.ocpsoft.rewrite.param.Constraint;
 import org.ocpsoft.rewrite.param.DefaultParameter;
 import org.ocpsoft.rewrite.param.DefaultParameterStore;
+import org.ocpsoft.rewrite.param.DefaultParameterValueStore;
 import org.ocpsoft.rewrite.param.Parameter;
 import org.ocpsoft.rewrite.param.ParameterStore;
 import org.ocpsoft.rewrite.param.ParameterValueStore;
@@ -176,9 +177,18 @@ public class RuleSubset extends DefaultOperationBuilder implements CompositeOper
             {
 
                 subContext.clear();
-                subContext.put(ParameterStore.class, context.get(ParameterStore.class));
+
+                ParameterStore parameterStore = (ParameterStore) context.get(ParameterStore.class);
+                if (parameterStore == null)
+                    parameterStore = new DefaultParameterStore();
+                subContext.put(ParameterStore.class, parameterStore);
+                setParameterStore(parameterStore);
+
                 ParameterValueStore values = (ParameterValueStore) context.get(ParameterValueStore.class);
+                if (values == null)
+                    values = new DefaultParameterValueStore();
                 subContext.put(ParameterValueStore.class, values);
+
                 subContext.setState(RewriteState.EVALUATING);
                 subContext.put(Rule.class, rule);
 
@@ -298,17 +308,15 @@ public class RuleSubset extends DefaultOperationBuilder implements CompositeOper
     }
 
     private boolean handleBindings(final Rewrite event, final EvaluationContextImpl context,
-                ParameterValueStore values)
+                ParameterValueStore valueStore)
     {
         boolean result = true;
         ParameterStore store = (ParameterStore) context.get(ParameterStore.class);
-
         for (Entry<String, Parameter<?>> entry : store)
         {
             Parameter<?> parameter = entry.getValue();
-            String value = values.retrieve(parameter);
-
-            if (!ParameterUtils.enqueueSubmission(event, context, parameter, value))
+            String values = valueStore.retrieve(parameter);
+            if (!ParameterUtils.enqueueSubmission(event, context, parameter, values))
             {
                 result = false;
                 break;
@@ -502,7 +510,8 @@ public class RuleSubset extends DefaultOperationBuilder implements CompositeOper
     }
 
     /**
-     * Add a {@link RuleLifecycleListener} to receive events when {@link Rule} instances are evaluated, executed, and their results.
+     * Add a {@link RuleLifecycleListener} to receive events when {@link Rule} instances are evaluated, executed, and
+     * their results.
      */
     public ListenerRegistration<RuleLifecycleListener> addLifecycleListener(final RuleLifecycleListener listener)
     {
