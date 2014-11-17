@@ -181,6 +181,110 @@ public class ParameterWiringTest
         }
     }
 
+    @Test
+    public void testIterationVariableResolving3() throws Exception
+    {
+        final Path folder = OperatingSystemUtils.createTempDir().toPath();
+        try (final GraphContext context = factory.create(folder))
+        {
+
+            GraphRewrite event = new GraphRewrite(context);
+            final DefaultEvaluationContext evaluationContext = new DefaultEvaluationContext();
+            final DefaultParameterValueStore values = new DefaultParameterValueStore();
+            evaluationContext.put(ParameterValueStore.class, values);
+
+            GraphService<ParameterWiringTestModel> service = new GraphService<>(context, ParameterWiringTestModel.class);
+
+            ParameterWiringTestModel model1 = service.create();
+            model1.setValue("The quick brown fox jumped over the lazy dog.");
+
+            ParameterWiringTestModel model2 = service.create();
+            model2.setValue("The lazy dog slept under the quick brown fox.");
+
+            ParameterWiringTestModel model3 = service.create();
+            model3.setValue("The lazy fox jumped over the quick brown dog.");
+
+            ParameterWiringTestModel model4 = service.create();
+            model4.setValue("The lazy fox slept under the quick brown dog.");
+
+            ParameterWiringTestModel model5 = service.create();
+            model5.setValue("The quick brown fox jumped over the lazy fox.");
+
+            ParameterWiringTestModel model6 = service.create();
+            model6.setValue("The lazy fox slept under the quick brown fox.");
+
+            ParameterWiringTestModel model7 = service.create();
+            model7.setValue("The lazy fox slept under the lazy fox.");
+
+            ParameterWiringTestModel model8 = service.create();
+            model8.setValue("The quick brown fox slept under the quick brown fox.");
+
+            ParameterWiringTestModel model9 = service.create();
+            model9.setValue("The stupid fox slept under the stupid fox.");
+
+            ParameterWiringTestModel model10 = service.create();
+            model10.setValue("stupid.");
+
+            ParameterWiringTestModel model11 = service.create();
+            model11.setValue("smart.");
+
+            ParameterWiringTestModel model12 = service.create();
+            model12.setValue("some lazy.");
+
+            ParameterWiringTestModel model13 = service.create();
+            model13.setValue("some brown.");
+
+            ParameterWiringTestModel model14 = service.create();
+            model14.setValue("some stupid.");
+
+            ParameterWiringTestRuleProvider3 provider = new ParameterWiringTestRuleProvider3();
+            RuleSubset.create(provider.getConfiguration(context)).perform(event, evaluationContext);
+
+            Assert.assertEquals(1, provider.getMatchCount());
+            Assert.assertEquals(model14, provider.getResults().iterator().next());
+        }
+    }
+
+    @Test
+    public void testIterationVariableResolving4() throws Exception
+    {
+        final Path folder = OperatingSystemUtils.createTempDir().toPath();
+        try (final GraphContext context = factory.create(folder))
+        {
+
+            GraphRewrite event = new GraphRewrite(context);
+            final DefaultEvaluationContext evaluationContext = new DefaultEvaluationContext();
+            final DefaultParameterValueStore values = new DefaultParameterValueStore();
+            evaluationContext.put(ParameterValueStore.class, values);
+
+            GraphService<ParameterWiringTestModel> service = new GraphService<>(context, ParameterWiringTestModel.class);
+
+            ParameterWiringTestModel model1 = service.create();
+            model1.setValue("The quick brown fox jumped over the lazy dog.");
+
+            ParameterWiringTestModel model2 = service.create();
+            model2.setValue("The lazy dog slept under the quick brown fox.");
+
+            ParameterWiringTestModel model3 = service.create();
+            model3.setValue("The lazy fox jumped over the quick brown dog.");
+
+            ParameterWiringTestModel model4 = service.create();
+            model4.setValue("The lazy fox slept under the quick brown dog.");
+
+            ParameterWiringTestModel model5 = service.create();
+            model5.setValue("The quick brown fox jumped over the lazy fox.");
+
+            ParameterWiringTestRuleProvider4 provider = new ParameterWiringTestRuleProvider4();
+            RuleSubset.create(provider.getConfiguration(context)).perform(event, evaluationContext);
+
+            Assert.assertEquals(4, provider.getMatchCount());
+            Assert.assertTrue(provider.getResults().contains(model1));
+            Assert.assertTrue(provider.getResults().contains(model3));
+            Assert.assertTrue(provider.getResults().contains(model4));
+            Assert.assertTrue(provider.getResults().contains(model5));
+        }
+    }
+
     private static class ParameterWiringTestRuleProvider extends WindupRuleProvider
     {
         private int matchCount;
@@ -191,9 +295,9 @@ public class ParameterWiringTest
         {
             return ConfigurationBuilder.begin()
                         .addRule()
-                        .when(ParameterWiringTestModelCondition.matchesValue("{*}{adjective} {animal} {verb}{*}")
+                        .when(ParameterWiringTestModelCondition.matchesValue("{*} {adjective} {animal} {verb}{*}")
                                     .as("1")
-                                    .and(ParameterWiringTestModelCondition.matchesValue("{*}{adjective} {animal}.")
+                                    .and(ParameterWiringTestModelCondition.matchesValue("{*} {adjective} {animal}.")
                                                 .from("1").as("result"))
                         )
                         .perform(Iteration.over("result").perform(
@@ -235,9 +339,9 @@ public class ParameterWiringTest
         {
             return ConfigurationBuilder.begin()
                         .addRule()
-                        .when(ParameterWiringTestModelCondition.matchesValue("{*}{adjective} {animal} {verb}{*}")
+                        .when(ParameterWiringTestModelCondition.matchesValue("{*} {adjective} {animal} {verb}{*}")
                                     .as("1")
-                                    .and(ParameterWiringTestModelCondition.matchesValue("{*}{adjective} {animal}.")
+                                    .and(ParameterWiringTestModelCondition.matchesValue("{*} {adjective} {animal}.")
                                                 .from("1").as("result"))
                         )
                         .perform(Iteration.over("result").perform(
@@ -256,6 +360,92 @@ public class ParameterWiringTest
                         .where("adjective").matches("\\w+")
                         .where("animal").matches("fox")
                         .where("verb").matches("\\w+");
+        }
+
+        public int getMatchCount()
+        {
+            return matchCount;
+        }
+
+        public List<ParameterWiringTestModel> getResults()
+        {
+            return results;
+        }
+    }
+
+    private static class ParameterWiringTestRuleProvider3 extends WindupRuleProvider
+    {
+        private int matchCount;
+        private List<ParameterWiringTestModel> results = new ArrayList<>();
+
+        @Override
+        public Configuration getConfiguration(GraphContext context)
+        {
+            return ConfigurationBuilder.begin()
+                        .addRule()
+                        .when(ParameterWiringTestModelCondition.matchesValue("{*} {adjective} {animal} {verb}{*}")
+                                    .as("1")
+                                    .and(ParameterWiringTestModelCondition.matchesValue("{*} {adjective} {otheranimal}.")
+                                                .from("1").as("2"))
+                                    .and(ParameterWiringTestModelCondition.matchesValue("{*} {adjective} {animal} {*} {isstupid} {otheranimal}.")
+                                                .from("2").as("3"))
+                                    .and(ParameterWiringTestModelCondition.matchesValue("{isstupid}.").as("4"))
+                                    .and(ParameterWiringTestModelCondition.matchesValue("some {isstupid}.").as("result"))
+                        )
+                        .perform(Iteration.over("result").perform(
+                                    new AbstractIterationOperation<ParameterWiringTestModel>()
+                                    {
+                                        @Override
+                                        public void perform(GraphRewrite event, EvaluationContext context,
+                                                    ParameterWiringTestModel payload)
+                                        {
+                                            matchCount++;
+                                            results.add(payload);
+                                        }
+                                    })
+                                    .endIteration()
+                        )
+                        .where("adjective").matches("\\w+")
+                        .where("animal").matches("fox")
+                        .where("verb").matches("\\w+")
+                        .where("isstupid").matches(".*");
+        }
+
+        public int getMatchCount()
+        {
+            return matchCount;
+        }
+
+        public List<ParameterWiringTestModel> getResults()
+        {
+            return results;
+        }
+    }
+
+    private static class ParameterWiringTestRuleProvider4 extends WindupRuleProvider
+    {
+        private int matchCount;
+        private List<ParameterWiringTestModel> results = new ArrayList<>();
+
+        @Override
+        public Configuration getConfiguration(GraphContext context)
+        {
+            return ConfigurationBuilder.begin()
+                        .addRule()
+                        .when(ParameterWiringTestModelCondition.matchesValue("{*} {adjective} {animal} {verb}{*}").as("result"))
+                        .perform(Iteration.over("result").perform(
+                                    new AbstractIterationOperation<ParameterWiringTestModel>()
+                                    {
+                                        @Override
+                                        public void perform(GraphRewrite event, EvaluationContext context,
+                                                    ParameterWiringTestModel payload)
+                                        {
+                                            matchCount++;
+                                            results.add(payload);
+                                        }
+                                    })
+                                    .endIteration()
+                        ).where("animal").matches("fox");
         }
 
         public int getMatchCount()
@@ -298,16 +488,20 @@ public class ParameterWiringTest
             return this;
         }
 
+        private Map<ParameterValueStore, Map<String, Iterable<WindupVertexFrame>>> getValueStoreMap(final EvaluationContext context)
+        {
+            @SuppressWarnings("unchecked")
+            Map<ParameterValueStore, Map<String, Iterable<WindupVertexFrame>>> cachedStores = (Map<ParameterValueStore, Map<String, Iterable<WindupVertexFrame>>>) context
+                        .get(PARAM_VALUE_STORE_LIST);
+            return cachedStores == null ? new ConcurrentHashMap<ParameterValueStore, Map<String, Iterable<WindupVertexFrame>>>() : cachedStores;
+        }
+
         @Override
         @SuppressWarnings("unchecked")
         public boolean evaluate(GraphRewrite event, final EvaluationContext context)
         {
-            Map<ParameterValueStore, Map<String, Iterable<WindupVertexFrame>>> cachedStores = (Map<ParameterValueStore, Map<String, Iterable<WindupVertexFrame>>>) context
-                        .get(PARAM_VALUE_STORE_LIST);
-            final Map<ParameterValueStore, Map<String, Iterable<WindupVertexFrame>>> valueStores = cachedStores == null ? new ConcurrentHashMap<ParameterValueStore, Map<String, Iterable<WindupVertexFrame>>>()
-                        : cachedStores;
+            final Map<ParameterValueStore, Map<String, Iterable<WindupVertexFrame>>> valueStores = getValueStoreMap(context);
 
-            ParameterValueStore previousValueStore = DefaultParameterValueStore.getInstance(context);
             try
             {
                 if (valueStores.isEmpty())
@@ -375,7 +569,7 @@ public class ParameterWiringTest
                                 context.put(ParameterValueStore.class, valueStore);
 
                                 /*
-                                 * Each ValueStore must correspond with the variables map which which it was created.
+                                 * Each ValueStore must correspond with the variables map with which it was created.
                                  */
                                 Variables.instance(event).push(variables);
                                 if (evaluateWithValueStore(event, context, frame))
@@ -405,7 +599,6 @@ public class ParameterWiringTest
             }
             finally
             {
-                context.put(ParameterValueStore.class, previousValueStore);
                 context.put(PARAM_VALUE_STORE_LIST, valueStores);
             }
         }
@@ -427,6 +620,7 @@ public class ParameterWiringTest
 
             String uuid = UUID.randomUUID().toString();
             query.as(uuid);
+            List<WindupVertexFrame> allFrameResults = new ArrayList<>();
             if (query.evaluate(event, context))
             {
                 Iterable<WindupVertexFrame> frames = Variables.instance(event).findVariable(uuid);
@@ -441,6 +635,7 @@ public class ParameterWiringTest
                         frameCreationContext.beginNew((Map) variables);
                         if (parseResult.submit(event, context))
                         {
+                            allFrameResults.add(model);
                             Maps.addListValue(variables, varname, model);
                         }
                         else
@@ -455,6 +650,7 @@ public class ParameterWiringTest
                     }
                 }
                 Variables.instance(event).removeVariable(uuid);
+                Variables.instance(event).setVariable(varname, allFrameResults);
                 return true;
             }
 
