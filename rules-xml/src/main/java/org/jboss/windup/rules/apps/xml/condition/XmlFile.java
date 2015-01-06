@@ -2,11 +2,16 @@ package org.jboss.windup.rules.apps.xml.condition;
 
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
 
+import javax.xml.namespace.QName;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
@@ -16,12 +21,16 @@ import javax.xml.transform.stream.StreamResult;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathExpression;
 import javax.xml.xpath.XPathFactory;
+import javax.xml.xpath.XPathFunction;
+import javax.xml.xpath.XPathFunctionException;
+import javax.xml.xpath.XPathFunctionResolver;
 
 import org.jboss.forge.furnace.util.Assert;
 import org.jboss.windup.config.GraphRewrite;
 import org.jboss.windup.config.Variables;
-import org.jboss.windup.config.condition.GraphCondition;
-import org.jboss.windup.config.operation.Iteration;
+import org.jboss.windup.config.parameters.FrameContext;
+import org.jboss.windup.config.parameters.FrameCreationContext;
+import org.jboss.windup.config.parameters.ParameterizedGraphCondition;
 import org.jboss.windup.graph.GraphContext;
 import org.jboss.windup.graph.model.WindupVertexFrame;
 import org.jboss.windup.graph.service.GraphService;
@@ -40,19 +49,28 @@ import org.jboss.windup.util.xml.XmlUtil;
 import org.ocpsoft.rewrite.config.Condition;
 import org.ocpsoft.rewrite.config.ConditionBuilder;
 import org.ocpsoft.rewrite.context.EvaluationContext;
+import org.ocpsoft.rewrite.param.DefaultParameterStore;
+import org.ocpsoft.rewrite.param.ParameterStore;
+import org.ocpsoft.rewrite.param.ParameterizedPatternResult;
+import org.ocpsoft.rewrite.param.RegexParameterizedPatternParser;
+import org.ocpsoft.rewrite.util.Maps;
+import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-public class XmlFile extends GraphCondition
+public class XmlFile extends ParameterizedGraphCondition
 {
     private static final Logger LOG = Logging.get(XmlFile.class);
 
     protected static final String UNPARSEABLE_XML_CLASSIFICATION = "Unparseable XML File";
     protected static final String UNPARSEABLE_XML_DESCRIPTION = "This file could not be parsed via XPath";
 
+    protected static final String WINDUP_NS_PREFIX = "windup";
+    protected static final String WINDUP_NS_URI = "http://windup.jboss.org/windupv2functions";
+
     private static XPathFactory factory = XPathFactory.newInstance();
-    private XPath xpathEngine = factory.newXPath();
+    private final XPath xpathEngine;
 
     private String xpathString;
     private XPathExpression compiledXPath;
@@ -61,6 +79,9 @@ public class XmlFile extends GraphCondition
     private String publicId;
     private String xpathResultMatch;
 
+    private ParameterStore parameterStore;
+    private RegexParameterizedPatternParser xpathPattern;
+
     public void setXpathResultMatch(String xpathResultMatch)
     {
         this.xpathResultMatch = xpathResultMatch;
@@ -68,11 +89,15 @@ public class XmlFile extends GraphCondition
 
     private XmlFile(String xpath)
     {
-        this.xpathString = xpath;
+        this();
+        setXpath(xpath);
     }
 
     XmlFile()
     {
+        this.namespaces.put(WINDUP_NS_PREFIX, WINDUP_NS_URI);
+
+        this.xpathEngine = factory.newXPath();
     }
 
     /**
@@ -121,12 +146,105 @@ public class XmlFile extends GraphCondition
     }
 
     @Override
-    public boolean evaluate(final GraphRewrite event, final EvaluationContext context)
+    public void setParameterStore(ParameterStore store)
+    {
+        this.parameterStore = store;
+        if (this.xpathPattern != null)
+        {
+            this.xpathPattern.setParameterStore(store);
+        }
+    }
+
+    @Override
+    public Set<String> getRequiredParameterNames()
+    {
+        if (this.xpathPattern == null)
+        {
+            return Collections.emptySet();
+        }
+        Set<String> result = new HashSet<>(this.xpathPattern.getRequiredParameterNames());
+        return result;
+    }
+
+    @Override
+    protected String getVarname()
+    {
+        return getOutputVariablesName();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    protected boolean evaluateAndPopulateValueStores(GraphRewrite event, EvaluationContext context, final FrameCreationContext frameCreationContext)
+    {
+        return evaluate(event, context, new EvaluationStrategy()
+        {
+            private LinkedHashMap<String, List<WindupVertexFrame>> variables;
+
+            @Override
+            @SuppressWarnings("rawtypes")
+            public void modelMatched()
+            {
+                this.variables = new LinkedHashMap<String, List<WindupVertexFrame>>();
+                frameCreationContext.beginNew((Map) variables);
+            }
+
+            @Override
+            public void modelSubmitted(WindupVertexFrame model)
+            {
+                Maps.addListValue(this.variables, getVarname(), model);
+            }
+
+            @Override
+            public void modelSubmissionRejected()
+            {
+                frameCreationContext.rollback();
+            }
+        });
+    }
+
+    @Override
+    protected boolean evaluateWithValueStore(GraphRewrite event, EvaluationContext context,
+                final FrameContext frameContext)
+    {
+        boolean result = evaluate(event, context, new EvaluationStrategy()
+        {
+            @Override
+            public void modelMatched()
+            {
+            }
+
+            @Override
+            public void modelSubmitted(WindupVertexFrame model)
+            {
+            }
+
+            @Override
+            public void modelSubmissionRejected()
+            {
+            }
+        });
+
+        if (result == false)
+            frameContext.reject();
+
+        return result;
+    }
+
+    private interface EvaluationStrategy
+    {
+        public void modelMatched();
+
+        public void modelSubmitted(WindupVertexFrame model);
+
+        public void modelSubmissionRejected();
+    }
+
+    private boolean evaluate(final GraphRewrite event, final EvaluationContext context, final EvaluationStrategy evaluationStrategy)
     {
         ExecutionStatistics.get().begin("XmlFile.evaluate");
         // list will cache all the created xpath matches for this given condition running
-        List<WindupVertexFrame> resultLocations = new ArrayList<WindupVertexFrame>();
-        GraphContext graphContext = event.getGraphContext();
+        final List<WindupVertexFrame> resultLocations = new ArrayList<WindupVertexFrame>();
+        final GraphContext graphContext = event.getGraphContext();
         GraphService<XmlFileModel> xmlResourceService = new GraphService<XmlFileModel>(graphContext,
                     XmlFileModel.class);
         Iterable<? extends WindupVertexFrame> allXmls;
@@ -141,7 +259,7 @@ public class XmlFile extends GraphCondition
 
         for (WindupVertexFrame iterated : allXmls)
         {
-            XmlFileModel xml = null;
+            final XmlFileModel xml;
             if (iterated instanceof FileReferenceModel)
             {
                 xml = (XmlFileModel) ((FileReferenceModel) iterated).getFile();
@@ -174,16 +292,135 @@ public class XmlFile extends GraphCondition
                             || !doctype.getPublicId().matches(publicId))
                 {
                     continue;
-                } else if(xpathString == null) {
-                    //if the xpath is not set and therefore we have the result already
+                }
+                else if (xpathString == null)
+                {
+                    // if the xpath is not set and therefore we have the result already
                     resultLocations.add(xml);
                 }
 
             }
             if (xpathString != null)
             {
-                if (compiledXPath == null)
+                XmlFileService xmlFileService = new XmlFileService(graphContext);
+                Document document = xmlFileService.loadDocumentQuiet(xml);
+                if (document != null)
                 {
+                    final ParameterStore store = DefaultParameterStore.getInstance(context);
+
+                    final XPathFunctionResolver originalResolver = this.xpathEngine.getXPathFunctionResolver();
+                    this.xpathEngine.setXPathFunctionResolver(new XPathFunctionResolver()
+                    {
+                        @Override
+                        public XPathFunction resolveFunction(QName functionName, int arity)
+                        {
+                            if (!WINDUP_NS_URI.equals(functionName.getNamespaceURI()))
+                            {
+                                return originalResolver.resolveFunction(functionName, arity);
+                            }
+                            if ("matches".equals(functionName.getLocalPart()))
+                            {
+                                return new XPathFunction()
+                                {
+                                    @Override
+                                    public Object evaluate(@SuppressWarnings("rawtypes") List args) throws XPathFunctionException
+                                    {
+                                        NodeList arg1 = (NodeList) args.get(0);
+                                        String nodeText = nodeListToString(arg1);
+                                        String patternString = (String) args.get(1);
+                                        RegexParameterizedPatternParser paramPattern = new RegexParameterizedPatternParser(patternString);
+                                        paramPattern.setParameterStore(store);
+                                        ParameterizedPatternResult referenceResult = paramPattern.parse(nodeText);
+
+                                        boolean refMatches = referenceResult.matches();
+                                        if (!refMatches)
+                                        {
+                                            evaluationStrategy.modelSubmissionRejected();
+                                            evaluationStrategy.modelMatched();
+                                            return false;
+                                        }
+                                        boolean refSubmitOk = referenceResult.submit(event, context);
+                                        if (!refSubmitOk)
+                                        {
+                                            evaluationStrategy.modelSubmissionRejected();
+                                            evaluationStrategy.modelMatched();
+                                            return false;
+                                        }
+                                        return refSubmitOk;
+                                    }
+                                };
+                            }
+                            else if ("persist".equals(functionName.getLocalPart()))
+                            {
+                                return new XPathFunction()
+                                {
+                                    @Override
+                                    public Object evaluate(@SuppressWarnings("rawtypes") List args) throws XPathFunctionException
+                                    {
+                                        System.out.println("Should persist node with params: " + args);
+                                        NodeList arg1 = (NodeList) args.get(0);
+                                        String nodeText = nodeListToString(arg1);
+                                        System.out.println("Should persist node with params (nodetext): " + nodeText);
+
+                                        for (int i = 0; i < arg1.getLength(); i++)
+                                        {
+                                            Node node = arg1.item(i);
+                                            if (xpathResultMatch != null)
+                                            {
+                                                if (!node.toString().matches(xpathResultMatch))
+                                                {
+                                                    continue;
+                                                }
+                                            }
+                                            // Everything passed for this Node. Start creating XmlTypeReferenceModel for it.
+                                            int lineNumber = (int) node.getUserData(
+                                                        LocationAwareContentHandler.LINE_NUMBER_KEY_NAME);
+                                            int columnNumber = (int) node.getUserData(
+                                                        LocationAwareContentHandler.COLUMN_NUMBER_KEY_NAME);
+
+                                            GraphService<XmlTypeReferenceModel> fileLocationService = new GraphService<XmlTypeReferenceModel>(
+                                                        graphContext,
+                                                        XmlTypeReferenceModel.class);
+                                            XmlTypeReferenceModel fileLocation = fileLocationService.create();
+                                            String sourceSnippit = nodeToString(node);
+                                            fileLocation.setSourceSnippit(sourceSnippit);
+                                            fileLocation.setLineNumber(lineNumber);
+                                            fileLocation.setColumnNumber(columnNumber);
+                                            fileLocation.setLength(node.toString().length());
+                                            fileLocation.setFile(xml);
+                                            fileLocation.setXpath(xpathString);
+                                            GraphService<NamespaceMetaModel> metaModelService = new GraphService<NamespaceMetaModel>(
+                                                        graphContext,
+                                                        NamespaceMetaModel.class);
+                                            for (Map.Entry<String, String> namespace : namespaces.entrySet())
+                                            {
+                                                NamespaceMetaModel metaModel = metaModelService.create();
+                                                metaModel.setSchemaLocation(namespace.getKey());
+                                                metaModel.setSchemaLocation(namespace.getValue());
+                                                metaModel.addXmlResource(xml);
+                                                fileLocation.addNamespace(metaModel);
+                                            }
+                                            resultLocations.add(fileLocation);
+                                            evaluationStrategy.modelSubmitted(fileLocation);
+                                            evaluationStrategy.modelMatched();
+                                        }
+
+                                        return true;
+                                    }
+                                };
+                            }
+                            else
+                            {
+                                throw new WindupException("Unrecognized function: {" + functionName.getNamespaceURI() + "}:"
+                                            + functionName.getLocalPart());
+                            }
+                        }
+                    });
+
+                    // TODO -- Pay no attention to the hackiness around not caching that (it's an easy fix, but I'd like to get
+                    // the other bits right first)
+                    // if (compiledXPath == null)
+                    // {
                     NamespaceMapContext nsContext = new NamespaceMapContext(namespaces);
                     this.xpathEngine.setNamespaceContext(nsContext);
                     try
@@ -195,61 +432,15 @@ public class XmlFile extends GraphCondition
                         LOG.severe("Condition: " + this + " failed to run, as the following xpath was uncompilable: " + xpathString);
                         return false;
                     }
-                }
+                    // }
 
-                XmlFileService xmlFileService = new XmlFileService(graphContext);
-                Document document = xmlFileService.loadDocumentQuiet(xml);
-                if (document != null)
-                {
+                    evaluationStrategy.modelMatched();
                     NodeList result = XmlUtil.xpathNodeList(document, compiledXPath);
                     if (result == null || result.getLength() == 0)
                     {
+                        evaluationStrategy.modelSubmissionRejected();
                         // cache that no results were found (this will save us from having to parse this file for this xpath again)
                         XmlFileCache.cacheNoResultsFound(xml.asVertex().getId(), this.xpathString, this.namespaces);
-                    }
-                    else
-                    {
-                        for (int i = 0; i < result.getLength(); i++)
-                        {
-                            Node node = result.item(i);
-                            if (xpathResultMatch != null)
-                            {
-                                if (!node.toString().matches(xpathResultMatch))
-                                {
-                                    continue;
-                                }
-                            }
-                            // Everything passed for this Node. Start creating XmlTypeReferenceModel for it.
-                            int lineNumber = (int) node.getUserData(
-                                        LocationAwareContentHandler.LINE_NUMBER_KEY_NAME);
-                            int columnNumber = (int) node.getUserData(
-                                        LocationAwareContentHandler.COLUMN_NUMBER_KEY_NAME);
-
-                            graphContext = event.getGraphContext();
-                            GraphService<XmlTypeReferenceModel> fileLocationService = new GraphService<XmlTypeReferenceModel>(
-                                        graphContext,
-                                        XmlTypeReferenceModel.class);
-                            XmlTypeReferenceModel fileLocation = fileLocationService.create();
-                            String sourceSnippit = nodeToString(node);
-                            fileLocation.setSourceSnippit(sourceSnippit);
-                            fileLocation.setLineNumber(lineNumber);
-                            fileLocation.setColumnNumber(columnNumber);
-                            fileLocation.setLength(node.toString().length());
-                            fileLocation.setFile(xml);
-                            fileLocation.setXpath(xpathString);
-                            GraphService<NamespaceMetaModel> metaModelService = new GraphService<NamespaceMetaModel>(
-                                        graphContext,
-                                        NamespaceMetaModel.class);
-                            for (Map.Entry<String, String> namespace : namespaces.entrySet())
-                            {
-                                NamespaceMetaModel metaModel = metaModelService.create();
-                                metaModel.setSchemaLocation(namespace.getKey());
-                                metaModel.setSchemaLocation(namespace.getValue());
-                                metaModel.addXmlResource(xml);
-                                fileLocation.addNamespace(metaModel);
-                            }
-                            resultLocations.add(fileLocation);
-                        }
                     }
                 }
             }
@@ -269,6 +460,11 @@ public class XmlFile extends GraphCondition
     {
         this.xpathString = xpath;
         this.compiledXPath = null;
+
+        if (xpath != null)
+        {
+            this.xpathPattern = new RegexParameterizedPatternParser(this.xpathString);
+        }
     }
 
     public void setPublicId(String publicId)
@@ -276,9 +472,25 @@ public class XmlFile extends GraphCondition
         this.publicId = publicId;
     }
 
+    private static String nodeListToString(NodeList nodeList)
+    {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < nodeList.getLength(); i++)
+        {
+            Node node = nodeList.item(i);
+            sb.append(nodeToString(node));
+        }
+        return sb.toString();
+    }
+
     private static String nodeToString(Node node)
     {
         StringWriter sw = new StringWriter();
+        if (node instanceof Attr)
+        {
+            Attr attr = (Attr) node;
+            return attr.getValue();
+        }
         try
         {
             Transformer t = TransformerFactory.newInstance().newTransformer();
