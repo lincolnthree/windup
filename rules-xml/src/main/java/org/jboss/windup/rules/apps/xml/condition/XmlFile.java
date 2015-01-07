@@ -24,6 +24,7 @@ import javax.xml.xpath.XPathFactory;
 import javax.xml.xpath.XPathFunction;
 import javax.xml.xpath.XPathFunctionException;
 import javax.xml.xpath.XPathFunctionResolver;
+import javax.xml.xpath.XPathVariableResolver;
 
 import org.jboss.forge.furnace.util.Assert;
 import org.jboss.windup.config.GraphRewrite;
@@ -308,6 +309,16 @@ public class XmlFile extends ParameterizedGraphCondition
                 {
                     final ParameterStore store = DefaultParameterStore.getInstance(context);
 
+                    final XPathVariableResolver originalVarResolver = this.xpathEngine.getXPathVariableResolver();
+                    this.xpathEngine.setXPathVariableResolver(new XPathVariableResolver()
+                    {
+                        @Override
+                        public Object resolveVariable(QName variableName)
+                        {
+                            System.out.println("Need to resolve: " + variableName);
+                            return originalVarResolver.resolveVariable(variableName);
+                        }
+                    });
                     final XPathFunctionResolver originalResolver = this.xpathEngine.getXPathFunctionResolver();
                     this.xpathEngine.setXPathFunctionResolver(new XPathFunctionResolver()
                     {

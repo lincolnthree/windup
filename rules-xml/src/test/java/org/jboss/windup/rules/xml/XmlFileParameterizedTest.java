@@ -34,6 +34,7 @@ import org.jboss.windup.reporting.config.Hint;
 import org.jboss.windup.reporting.model.FileLocationModel;
 import org.jboss.windup.reporting.model.InlineHintModel;
 import org.jboss.windup.rules.apps.xml.condition.XmlFile;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.ocpsoft.rewrite.config.Configuration;
@@ -115,11 +116,42 @@ public class XmlFileParameterizedTest
             processor.execute(windupConfiguration);
 
             GraphService<InlineHintModel> hintService = new GraphService<>(context, InlineHintModel.class);
+            boolean found1 = false;
+            boolean found2 = false;
+            boolean found3 = false;
+            boolean found4 = false;
+            boolean found5 = false;
             for (InlineHintModel model : hintService.findAll())
             {
+                String text = model.getHint();
+                Assert.assertNotNull(text);
+                if (text.equals("Found value: 1"))
+                {
+                    found1 = true;
+                }
+                else if (text.equals("Found value: 2"))
+                {
+                    found2 = true;
+                }
+                else if (text.equals("Found value: 3"))
+                {
+                    found3 = true;
+                }
+                else if (text.equals("Found value: 4"))
+                {
+                    found4 = true;
+                }
+                else if (text.equals("Found value: 5"))
+                {
+                    found5 = true;
+                }
                 System.out.println("Model: " + model.getHint() + ", full: " + model);
             }
-
+            Assert.assertTrue(found1);
+            Assert.assertTrue(found2);
+            Assert.assertTrue(found3);
+            Assert.assertFalse(found4);
+            Assert.assertTrue(found5);
         }
     }
 
@@ -150,7 +182,7 @@ public class XmlFileParameterizedTest
                         .begin()
                         .addRule()
                         .when(XmlFile.matchesXpath("/root/row[windup:matches(index/text(), '{index}')]/@indexAtt[windup:matches(self::node(), '{index}')]/self::node()[windup:persist(.)]"))
-                        .perform(Hint.withText("simple text {index}").withEffort(2)
+                        .perform(Hint.withText("Found value: {index}").withEffort(2)
                                      .and(addTypeRefToList));
         }
         // @formatter:on
