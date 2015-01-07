@@ -429,7 +429,15 @@ public class XmlFile extends ParameterizedGraphCondition
                     }
                     catch (Exception e)
                     {
-                        LOG.severe("Condition: " + this + " failed to run, as the following xpath was uncompilable: " + xpathString);
+                        String message = e.getMessage();
+
+                        // brutal hack to try to get a reasonable error message (ugly, but it seems to work)
+                        if (message == null && e.getCause() != null && e.getCause().getMessage() != null)
+                        {
+                            message = e.getCause().getMessage();
+                        }
+                        LOG.severe("Condition: " + this + " failed to run, as the following xpath was uncompilable: " + xpathString + " due to: "
+                                    + message);
                         return false;
                     }
                     // }
