@@ -121,6 +121,11 @@ public class XmlFileParameterizedTest
             boolean found3 = false;
             boolean found4 = false;
             boolean found5 = false;
+            boolean found6 = false;
+            boolean found7 = false;
+            boolean found8 = false;
+            boolean found9 = false;
+            boolean found10 = false;
             for (InlineHintModel model : hintService.findAll())
             {
                 String text = model.getHint();
@@ -145,6 +150,26 @@ public class XmlFileParameterizedTest
                 {
                     found5 = true;
                 }
+                else if (text.equals("Found value: 6"))
+                {
+                    found6 = true;
+                }
+                else if (text.equals("Found value: 7"))
+                {
+                    found7 = true;
+                }
+                else if (text.equals("Found value: 8"))
+                {
+                    found8 = true;
+                }
+                else if (text.equals("Found value: 9"))
+                {
+                    found9 = true;
+                }
+                else if (text.equals("Found value: 10"))
+                {
+                    found10 = true;
+                }
                 System.out.println("Model: " + model.getHint() + ", full: " + model);
             }
             Assert.assertTrue(found1);
@@ -152,6 +177,11 @@ public class XmlFileParameterizedTest
             Assert.assertTrue(found3);
             Assert.assertFalse(found4);
             Assert.assertTrue(found5);
+            Assert.assertTrue(found6);
+            Assert.assertTrue(found7);
+            Assert.assertFalse(found8);
+            Assert.assertTrue(found9);
+            Assert.assertTrue(found10);
         }
     }
 
