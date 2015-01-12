@@ -120,6 +120,7 @@ public class XmlFileParameterizedTest
             boolean found2 = false;
             boolean found3 = false;
             boolean found4 = false;
+            boolean foundWrongValue = false;
             boolean found5 = false;
             boolean found6 = false;
             boolean found7 = false;
@@ -145,6 +146,10 @@ public class XmlFileParameterizedTest
                 else if (text.equals("Found value: 4"))
                 {
                     found4 = true;
+                }
+                else if (text.equals("Found value: wrongvalue"))
+                {
+                    foundWrongValue = true;
                 }
                 else if (text.equals("Found value: 5"))
                 {
@@ -176,6 +181,7 @@ public class XmlFileParameterizedTest
             Assert.assertTrue(found2);
             Assert.assertTrue(found3);
             Assert.assertFalse(found4);
+            Assert.assertFalse(foundWrongValue);
             Assert.assertTrue(found5);
             Assert.assertTrue(found6);
             Assert.assertTrue(found7);
@@ -211,7 +217,7 @@ public class XmlFileParameterizedTest
             return ConfigurationBuilder
                         .begin()
                         .addRule()
-                        .when(XmlFile.matchesXpath("/root/row[windup:matches(index/text(), '{index}')]/@indexAtt[windup:matches(self::node(), '{index}')]/self::node()[windup:persist(.)]"))
+                        .when(XmlFile.matchesXpath("/root/row[windup:startFrame(0) and windup:evaluate(0, windup:matches(0, index/text(), '{index}'))]/@indexAtt[windup:startFrame(1) and windup:evaluate(1, windup:matches(1, self::node(), '{index}'))]/self::node()[windup:persist(2, .)]"))
                         .perform(Hint.withText("Found value: {index}").withEffort(2)
                                      .and(addTypeRefToList));
         }

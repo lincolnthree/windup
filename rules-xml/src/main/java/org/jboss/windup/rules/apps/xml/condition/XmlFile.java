@@ -51,7 +51,10 @@ import org.ocpsoft.rewrite.config.Condition;
 import org.ocpsoft.rewrite.config.ConditionBuilder;
 import org.ocpsoft.rewrite.context.EvaluationContext;
 import org.ocpsoft.rewrite.param.DefaultParameterStore;
+import org.ocpsoft.rewrite.param.DefaultParameterValueStore;
+import org.ocpsoft.rewrite.param.Parameter;
 import org.ocpsoft.rewrite.param.ParameterStore;
+import org.ocpsoft.rewrite.param.ParameterValueStore;
 import org.ocpsoft.rewrite.param.ParameterizedPatternResult;
 import org.ocpsoft.rewrite.param.RegexParameterizedPatternParser;
 import org.ocpsoft.rewrite.util.Maps;
@@ -309,6 +312,8 @@ public class XmlFile extends ParameterizedGraphCondition
                 {
                     final ParameterStore store = DefaultParameterStore.getInstance(context);
 
+                    final XmlFileParameterMatchCache paramMatchCache = new XmlFileParameterMatchCache();
+
                     final XPathVariableResolver originalVarResolver = this.xpathEngine.getXPathVariableResolver();
                     this.xpathEngine.setXPathVariableResolver(new XPathVariableResolver()
                     {
@@ -329,16 +334,50 @@ public class XmlFile extends ParameterizedGraphCondition
                             {
                                 return originalResolver.resolveFunction(functionName, arity);
                             }
-                            if ("matches".equals(functionName.getLocalPart()))
+                            if ("startFrame".equals(functionName.getLocalPart()))
                             {
                                 return new XPathFunction()
                                 {
                                     @Override
                                     public Object evaluate(@SuppressWarnings("rawtypes") List args) throws XPathFunctionException
                                     {
-                                        NodeList arg1 = (NodeList) args.get(0);
+                                        int frameIdx = ((Double) args.get(0)).intValue();
+                                        System.out.println("startFrame(" + frameIdx + ")!");
+                                        paramMatchCache.addFrame(frameIdx);
+                                        return true;
+                                    }
+                                };
+                            }
+                            else if ("evaluate".equals(functionName.getLocalPart()))
+                            {
+                                return new XPathFunction()
+                                {
+                                    @Override
+                                    public Object evaluate(@SuppressWarnings("rawtypes") List args) throws XPathFunctionException
+                                    {
+                                        int frameIdx = ((Double) args.get(0)).intValue();
+                                        boolean expressionResult = (Boolean) args.get(1);
+                                        System.out.println("evaluate(" + frameIdx + ", " + expressionResult + ")");
+                                        if (!expressionResult)
+                                        {
+                                            evaluationStrategy.modelSubmissionRejected();
+                                        }
+                                        return expressionResult;
+                                    }
+                                };
+                            }
+                            else if ("matches".equals(functionName.getLocalPart()))
+                            {
+                                return new XPathFunction()
+                                {
+                                    @Override
+                                    public Object evaluate(@SuppressWarnings("rawtypes") List args) throws XPathFunctionException
+                                    {
+                                        int frameIdx = ((Double) args.get(0)).intValue();
+                                        NodeList arg1 = (NodeList) args.get(1);
                                         String nodeText = nodeListToString(arg1);
-                                        String patternString = (String) args.get(1);
+                                        String patternString = (String) args.get(2);
+                                        System.out.println("matches(" + frameIdx + ", " + nodeText + ", " + patternString + ")");
                                         RegexParameterizedPatternParser paramPattern = new RegexParameterizedPatternParser(patternString);
                                         paramPattern.setParameterStore(store);
                                         ParameterizedPatternResult referenceResult = paramPattern.parse(nodeText);
@@ -346,16 +385,29 @@ public class XmlFile extends ParameterizedGraphCondition
                                         boolean refMatches = referenceResult.matches();
                                         if (!refMatches)
                                         {
-                                            evaluationStrategy.modelSubmissionRejected();
-                                            evaluationStrategy.modelMatched();
                                             return false;
                                         }
-                                        boolean refSubmitOk = referenceResult.submit(event, context);
+                                        boolean refSubmitOk = true;
+                                        for (Map.Entry<Parameter<?>, String> paramEntry : referenceResult.getParameters(context).entrySet())
+                                        {
+                                            String name = paramEntry.getKey().getName();
+                                            if (!paramMatchCache.checkVariable(frameIdx, name, paramEntry.getValue()))
+                                            {
+                                                refSubmitOk = false;
+                                                break;
+                                            }
+                                        }
+
                                         if (!refSubmitOk)
                                         {
-                                            evaluationStrategy.modelSubmissionRejected();
-                                            evaluationStrategy.modelMatched();
                                             return false;
+                                        }
+
+                                        for (Map.Entry<Parameter<?>, String> paramEntry : referenceResult.getParameters(context).entrySet())
+                                        {
+                                            String name = paramEntry.getKey().getName();
+                                            String value = paramEntry.getValue();
+                                            paramMatchCache.addVariable(frameIdx, name, value);
                                         }
                                         return refSubmitOk;
                                     }
@@ -368,10 +420,11 @@ public class XmlFile extends ParameterizedGraphCondition
                                     @Override
                                     public Object evaluate(@SuppressWarnings("rawtypes") List args) throws XPathFunctionException
                                     {
-                                        System.out.println("Should persist node with params: " + args);
-                                        NodeList arg1 = (NodeList) args.get(0);
+                                        int frameIdx = ((Double) args.get(0)).intValue();
+                                        NodeList arg1 = (NodeList) args.get(1);
                                         String nodeText = nodeListToString(arg1);
-                                        System.out.println("Should persist node with params (nodetext): " + nodeText);
+                                        System.out.println("persist(" + frameIdx + ", " + nodeText + ")");
+                                        System.out.println();
 
                                         for (int i = 0; i < arg1.getLength(); i++)
                                         {
@@ -412,6 +465,20 @@ public class XmlFile extends ParameterizedGraphCondition
                                                 fileLocation.addNamespace(metaModel);
                                             }
                                             resultLocations.add(fileLocation);
+
+                                            evaluationStrategy.modelMatched();
+                                            ParameterValueStore valueStore = DefaultParameterValueStore.getInstance(context);
+                                            for (Map.Entry<String, String> entry : paramMatchCache.getVariables(frameIdx).entrySet())
+                                            {
+                                                Parameter<?> param = store.get(entry.getKey());
+                                                String value = entry.getValue();
+
+                                                if (!valueStore.submit(event, context, param, value))
+                                                {
+                                                    return false;
+                                                }
+                                            }
+
                                             evaluationStrategy.modelSubmitted(fileLocation);
                                             evaluationStrategy.modelMatched();
                                         }
@@ -453,7 +520,6 @@ public class XmlFile extends ParameterizedGraphCondition
                     }
                     // }
 
-                    evaluationStrategy.modelMatched();
                     NodeList result = XmlUtil.xpathNodeList(document, compiledXPath);
                     if (result == null || result.getLength() == 0)
                     {
