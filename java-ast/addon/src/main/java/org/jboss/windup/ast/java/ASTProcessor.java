@@ -1,7 +1,5 @@
 package org.jboss.windup.ast.java;
 
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -13,10 +11,7 @@ import java.util.Set;
 import java.util.Stack;
 import java.util.logging.Logger;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.eclipse.jdt.core.dom.AST;
-import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.Annotation;
 import org.eclipse.jdt.core.dom.ArrayInitializer;
@@ -61,8 +56,8 @@ import org.jboss.windup.ast.java.data.annotations.AnnotationLiteralValue;
 import org.jboss.windup.ast.java.data.annotations.AnnotationValue;
 
 /**
- * Provides the ability to parse a Java file and return a {@link ClassReferences} object containing the fully qualified names of all of the contained
- * references.
+ * Provides the ability to parse a Java file and return a {@link ClassReferences} object containing the fully qualified
+ * names of all of the contained references.
  * 
  * @author <a href="mailto:jesse.sightler@gmail.com">Jesse Sightler</a>
  *
@@ -73,11 +68,6 @@ public class ASTProcessor extends ASTVisitor
 
     private final WildcardImportResolver wildcardImportResolver;
     private CompilationUnit cu;
-    private Path javaFile;
-    private ASTParser parser;
-
-    private final Set<String> libraryPaths;
-    private final Set<String> sourcePaths;
 
     /**
      * Contains all wildcard imports (import com.example.*) lines from the source file.
@@ -87,8 +77,8 @@ public class ASTProcessor extends ASTVisitor
     private final List<String> wildcardImports = new ArrayList<>();
 
     /**
-     * Indicates that we have already attempted to query the graph for this particular shortname. The shortname will exist here even if no results
-     * were found.
+     * Indicates that we have already attempted to query the graph for this particular shortname. The shortname will
+     * exist here even if no results were found.
      */
     private final Set<String> classNameLookedUp = new HashSet<>();
 
@@ -106,115 +96,12 @@ public class ASTProcessor extends ASTVisitor
      */
     private final Map<String, String> nameInstance = new HashMap<String, String>();
 
-    private ClassReferences classReferences;
+    private List<ClassReference> classReferences = new ArrayList<>();
 
-    /**
-     * Processes a java file using the default {@link WildcardImportResolver}.
-     * 
-     * See also: {@see JavaASTProcessor#analyzeJavaFile(WildcardImportResolver, Set, Set, Path)}
-     */
-    public static ClassReferences analyzeJavaFile(Set<String> libraryPaths, Set<String> sourcePaths, Path sourceFile)
+    public ASTProcessor(CompilationUnit unit, WildcardImportResolver importResolver)
     {
-        return new ASTProcessor(new NoopWildcardImportResolver(), libraryPaths, sourcePaths).analyzeFile(sourceFile);
-    }
-
-    /**
-     * Parses the provided file, using the given libraryPaths and sourcePaths as context. The libraries may be either jar files or references to
-     * directories containing class files.
-     * 
-     * The sourcePaths must be a reference to the top level directory for sources (eg, for a file src/main/java/org/example/Foo.java, the source path
-     * would be src/main/java).
-     * 
-     * The wildcard resolver provides a fallback for processing wildcard imports that the underlying parser was unable to resolve.
-     */
-    public static ClassReferences analyzeJavaFile(WildcardImportResolver importResolver, Set<String> libraryPaths, Set<String> sourcePaths,
-                Path sourceFile)
-    {
-        return new ASTProcessor(importResolver, libraryPaths, sourcePaths).analyzeFile(sourceFile);
-    }
-
-    public ASTProcessor(WildcardImportResolver importResolver, Set<String> libraryPaths, Set<String> sourcePaths)
-    {
+        this.cu = unit;
         this.wildcardImportResolver = importResolver;
-        this.parser = ASTParser.newParser(AST.JLS8);
-        this.libraryPaths = libraryPaths;
-        this.sourcePaths = sourcePaths;
-    }
-
-    public ClassReferences analyzeFile(Path javaFile)
-    {
-        this.classReferences = new ClassReferences();
-        this.wildcardImports.clear();
-        this.classNameLookedUp.clear();
-        this.classNameToFQCN.clear();
-        this.names.clear();
-        this.nameInstance.clear();
-        this.javaFile = javaFile;
-
-        parser.setEnvironment(libraryPaths.toArray(new String[libraryPaths.size()]), sourcePaths.toArray(new String[sourcePaths.size()]), null, true);
-        parser.setBindingsRecovery(false);
-        parser.setResolveBindings(true);
-
-        String fileName = javaFile.getFileName().toString();
-        parser.setUnitName(fileName);
-        try
-        {
-            parser.setSource(FileUtils.readFileToString(javaFile.toFile()).toCharArray());
-        }
-        catch (IOException e)
-        {
-            throw new ASTException("Failed to get source for file: " + javaFile.toString() + " due to: " + e.getMessage(), e);
-        }
-        parser.setKind(ASTParser.K_COMPILATION_UNIT);
-        this.cu = (CompilationUnit) parser.createAST(null);
-
-        PackageDeclaration packageDeclaration = cu.getPackage();
-        String packageName = packageDeclaration == null ? "" : packageDeclaration.getName().getFullyQualifiedName();
-        @SuppressWarnings("unchecked")
-        List<TypeDeclaration> types = cu.types();
-        String fqcn = null;
-        if (!types.isEmpty())
-        {
-            TypeDeclaration typeDeclaration = (TypeDeclaration) types.get(0);
-            String className = typeDeclaration.getName().getFullyQualifiedName();
-
-            if (packageName.equals(""))
-            {
-                fqcn = className;
-            }
-            else
-            {
-                fqcn = packageName + "." + className;
-            }
-            this.classReferences.addReference(new ClassReference(fqcn, TypeReferenceLocation.TYPE, cu.getLineNumber(typeDeclaration
-                        .getStartPosition()), cu.getColumnNumber(cu.getStartPosition()), cu.getLength(), extractDefinitionLine(typeDeclaration
-                        .toString())));
-
-            Type superclassType = typeDeclaration.getSuperclassType();
-            ITypeBinding resolveBinding = null;
-            if (superclassType != null)
-            {
-                resolveBinding = superclassType.resolveBinding();
-            }
-
-            while (resolveBinding != null)
-            {
-                if (superclassType.resolveBinding() != null)
-                {
-                    this.classReferences.addReference(new ClassReference(resolveBinding.getQualifiedName(), TypeReferenceLocation.TYPE, cu
-                                .getLineNumber(typeDeclaration
-                                            .getStartPosition()), cu.getColumnNumber(cu.getStartPosition()), cu.getLength(),
-                                extractDefinitionLine(typeDeclaration.toString())));
-                }
-                resolveBinding = resolveBinding.getSuperclass();
-            }
-        }
-
-        this.names.add("this");
-        this.nameInstance.put("this", fqcn);
-
-        cu.accept(this);
-        return this.classReferences;
     }
 
     private String extractDefinitionLine(String typeDeclaration)
@@ -232,7 +119,7 @@ public class ASTProcessor extends ASTVisitor
         return typeLine;
     }
 
-    public ClassReferences getJavaClassReferences()
+    public List<ClassReference> getJavaClassReferences()
     {
         return this.classReferences;
     }
@@ -240,19 +127,19 @@ public class ASTProcessor extends ASTVisitor
     private void processConstructor(ConstructorType interest, int lineNumber, int columnNumber, int length, String line)
     {
         String text = interest.toString();
-        this.classReferences.addReference(new ClassReference(text, TypeReferenceLocation.CONSTRUCTOR_CALL, lineNumber, columnNumber, length,
+        this.classReferences.add(new ClassReference(text, TypeReferenceLocation.CONSTRUCTOR_CALL, lineNumber, columnNumber, length,
                     line));
     }
 
     private void processMethod(MethodType interest, TypeReferenceLocation location, int lineNumber, int columnNumber, int length, String line)
     {
         String text = interest.toString();
-        this.classReferences.addReference(new ClassReference(text, location, lineNumber, columnNumber, length, line));
+        this.classReferences.add(new ClassReference(text, location, lineNumber, columnNumber, length, line));
     }
 
     private void processImport(String interest, int lineNumber, int columnNumber, int length, String line)
     {
-        this.classReferences.addReference(new ClassReference(interest, TypeReferenceLocation.IMPORT, lineNumber, columnNumber, length, line));
+        this.classReferences.add(new ClassReference(interest, TypeReferenceLocation.IMPORT, lineNumber, columnNumber, length, line));
     }
 
     private ClassReference processTypeBinding(ITypeBinding type, TypeReferenceLocation referenceLocation, int lineNumber, int columnNumber,
@@ -265,14 +152,15 @@ public class ASTProcessor extends ASTVisitor
     }
 
     /**
-     * The method determines if the type can be resolved and if not, will try to guess the qualified name using the information from the imports.
+     * The method determines if the type can be resolved and if not, will try to guess the qualified name using the
+     * information from the imports.
      */
     private ClassReference processType(Type type, TypeReferenceLocation typeReferenceLocation, int lineNumber, int columnNumber, int length,
                 String line)
     {
         if (type == null)
             return null;
-        
+
         ITypeBinding resolveBinding = type.resolveBinding();
         if (resolveBinding == null)
         {
@@ -294,14 +182,14 @@ public class ASTProcessor extends ASTVisitor
             return null;
         line = line.replaceAll("(\\n)|(\\r)", "");
         ClassReference typeRef = new ClassReference(sourceString, referenceLocation, lineNumber, columnNumber, length, line);
-        this.classReferences.addReference(typeRef);
+        this.classReferences.add(typeRef);
         return typeRef;
     }
 
     @Override
     public boolean visit(MethodDeclaration node)
     {
-        //register method return type
+        // register method return type
         IMethodBinding resolveBinding = node.resolveBinding();
         ITypeBinding returnType = null;
         if (resolveBinding != null)
@@ -507,7 +395,7 @@ public class ASTProcessor extends ASTVisitor
         }
         else
         {
-            LOG.warning("Unexpected type: " + expression.getClass().getCanonicalName() + " in file: " + this.javaFile
+            LOG.warning("Unexpected type: " + expression.getClass().getCanonicalName() + " in file: " + cu.toString()
                         + " just attempting to use it as a string value");
             value = new AnnotationLiteralValue(String.class, expression == null ? null : expression.toString());
         }
@@ -596,7 +484,7 @@ public class ASTProcessor extends ASTVisitor
     public boolean visit(NormalAnnotation node)
     {
         AnnotationClassReference reference = processAnnotation(node);
-        this.classReferences.addReference(reference);
+        this.classReferences.add(reference);
 
         // false to avoid recursively processing nested annotations (our code already handles that)
         return false;
@@ -606,7 +494,7 @@ public class ASTProcessor extends ASTVisitor
     public boolean visit(SingleMemberAnnotation node)
     {
         AnnotationClassReference reference = processAnnotation(node);
-        this.classReferences.addReference(reference);
+        this.classReferences.add(reference);
         return false;
     }
 
@@ -614,7 +502,7 @@ public class ASTProcessor extends ASTVisitor
     public boolean visit(MarkerAnnotation node)
     {
         AnnotationClassReference reference = processAnnotation(node);
-        this.classReferences.addReference(reference);
+        this.classReferences.add(reference);
         return false;
     }
 

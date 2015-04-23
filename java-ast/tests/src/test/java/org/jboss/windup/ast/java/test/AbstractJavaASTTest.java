@@ -22,6 +22,7 @@ public abstract class AbstractJavaASTTest
     @Deployment
     @Dependencies({
                 @AddonDependency(name = "org.jboss.windup.ast:windup-java-ast"),
+                @AddonDependency(name = "org.jboss.windup.utils:windup-utils"),
                 @AddonDependency(name = "org.jboss.forge.furnace.container:cdi"),
     })
     public static ForgeArchive getDeployment()
