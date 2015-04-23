@@ -13,7 +13,6 @@ import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.eclipse.jdt.core.dom.FileASTRequestor;
 import org.eclipse.jdt.core.dom.IBinding;
-import org.jboss.forge.furnace.util.Predicate;
 import org.jboss.windup.ast.java.data.ClassReference;
 import org.jboss.windup.ast.java.data.ClassReferences;
 
@@ -26,6 +25,10 @@ import org.jboss.windup.ast.java.data.ClassReferences;
  */
 public class BatchASTProcessor
 {
+    public static interface BatchASTCallback
+    {
+        public void processed(File file, List<ClassReference> references);
+    }
 
     private static final int MAX_FILES = 1000;
 
@@ -34,10 +37,9 @@ public class BatchASTProcessor
     private final Set<String> libraryPaths;
     private final Set<String> sourcePaths;
 
-    public static void analyzeJavaFiles(Set<String> libraryPaths, Set<String> sourcePaths, Set<File> sourceFiles,
-                Predicate<CompilationUnit> unitsCallback, Predicate<ClassReference> referencesCallback)
+    public static void analyzeJavaFiles(Set<String> libraryPaths, Set<String> sourcePaths, Set<File> sourceFiles, BatchASTCallback callback)
     {
-        new BatchASTProcessor(libraryPaths, sourcePaths).analyzeFiles(sourceFiles, unitsCallback, referencesCallback);
+        new BatchASTProcessor(libraryPaths, sourcePaths).analyzeFiles(sourceFiles, callback);
     }
 
     public BatchASTProcessor(Set<String> libraryPaths, Set<String> sourcePaths)
@@ -46,7 +48,7 @@ public class BatchASTProcessor
         this.sourcePaths = sourcePaths;
     }
 
-    public void analyzeFiles(Set<File> sourceFiles, final Predicate<CompilationUnit> unitsCallback, final Predicate<ClassReference> callback)
+    public void analyzeFiles(Set<File> sourceFiles, final BatchASTCallback callback)
     {
         String[] libraryPathsArray = libraryPaths.toArray(new String[libraryPaths.size()]);
         String[] sourcePathsArray = sourcePaths.toArray(new String[sourcePaths.size()]);
@@ -65,16 +67,9 @@ public class BatchASTProcessor
                 @Override
                 public void acceptAST(String sourceFilePath, CompilationUnit unit)
                 {
-                    if (!unitsCallback.accept(unit))
-                        return;
-
                     ASTProcessor processor = new ASTProcessor(unit, importResolver);
                     unit.accept(processor);
-                    for (ClassReference ref : processor.getJavaClassReferences())
-                    {
-                        if (!callback.accept(ref))
-                            return;
-                    }
+                    callback.processed(new File(sourceFilePath), processor.getJavaClassReferences());
                 }
 
                 @Override
@@ -103,7 +98,8 @@ public class BatchASTProcessor
                         true);
             parser.setBindingsRecovery(false);
             parser.setResolveBindings(true);
-            parser.createASTs(sourceFilePaths, encodings, bindingKeys, requestor, progressMonitor);
+            // parser.createASTs(sourceFilePaths, encodings, bindingKeys, requestor, progressMonitor);
+            parser.createASTs(sourceFilePaths, encodings, bindingKeys, requestor, null);
         }
     }
 

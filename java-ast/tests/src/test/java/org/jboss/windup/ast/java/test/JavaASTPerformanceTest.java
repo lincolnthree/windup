@@ -3,12 +3,11 @@ package org.jboss.windup.ast.java.test;
 import java.io.File;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.eclipse.jdt.core.dom.CompilationUnit;
 import org.jboss.arquillian.junit.Arquillian;
-import org.jboss.forge.furnace.util.Predicate;
 import org.jboss.forge.furnace.util.Visitor;
 import org.jboss.windup.ast.java.BatchASTProcessor;
 import org.jboss.windup.ast.java.data.ClassReference;
@@ -23,7 +22,7 @@ public class JavaASTPerformanceTest extends AbstractJavaASTTest
     @Test
     public void testProcessAST() throws Exception
     {
-        String sourcePath = "/Users/lb3/Desktop/decompiled_35_mb_app";
+        String sourcePath = "/home/jsightler/project/migration/examples/private/att/ATTEARFiles/ClfyAgent.ear.report";
         File rootDirectory = new File(sourcePath);
         final Set<String> libraryPaths = new HashSet<>();
         FileVisit.visit(rootDirectory, new FileSuffixPredicate(".jar"), new Visitor<File>()
@@ -58,25 +57,15 @@ public class JavaASTPerformanceTest extends AbstractJavaASTTest
         final AtomicInteger units = new AtomicInteger();
         final AtomicInteger references = new AtomicInteger();
 
-        BatchASTProcessor.analyzeJavaFiles(libraryPaths, sourcePaths, sourceFiles,
-                    new Predicate<CompilationUnit>()
-                    {
-                        @Override
-                        public boolean accept(CompilationUnit type)
-                        {
-                            units.incrementAndGet();
-                            return true;
-                        }
-                    },
-                    new Predicate<ClassReference>()
-                    {
-                        @Override
-                        public boolean accept(ClassReference type)
-                        {
-                            references.incrementAndGet();
-                            return true;
-                        }
-                    });
+        BatchASTProcessor.analyzeJavaFiles(libraryPaths, sourcePaths, sourceFiles, new BatchASTProcessor.BatchASTCallback()
+        {
+            @Override
+            public void processed(File file, List<ClassReference> referencesList)
+            {
+                units.incrementAndGet();
+                references.addAndGet(referencesList.size());
+            }
+        });
 
         long endTime = System.currentTimeMillis();
         System.out.println("Processed: " + units.get() + "/" + sourceFiles.size() + " files in " + ((endTime - beginTime) / 1000)

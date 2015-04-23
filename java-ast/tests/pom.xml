@@ -21,6 +21,11 @@
         </dependency>
 
         <!-- Addon Dependencies -->
+        <dependency>
+            <groupId>org.jboss.windup.utils</groupId>
+            <artifactId>windup-utils</artifactId>
+            <classifier>forge-addon</classifier>
+        </dependency>
 
         <!-- Furnace Container -->
         <dependency>
