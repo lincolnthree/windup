@@ -5,6 +5,9 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.logging.Logger;
 
+import javax.inject.Inject;
+
+import org.jboss.forge.furnace.services.Imported;
 import org.jboss.windup.config.GraphRewrite;
 import org.jboss.windup.graph.model.WindupVertexFrame;
 import org.jboss.windup.graph.model.resource.FileModel;
@@ -21,7 +24,14 @@ public class FileMappingGraphChangedListener implements GraphChangedListener
 
     private GraphRewrite event;
 
-    public FileMappingGraphChangedListener(GraphRewrite event)
+    @Inject
+    private Imported<FileModelListener> listeners;
+
+    public FileMappingGraphChangedListener()
+    {
+    }
+
+    public void setGraphRewrite(GraphRewrite event)
     {
         this.event = event;
     }
@@ -33,27 +43,37 @@ public class FileMappingGraphChangedListener implements GraphChangedListener
         {
             FileService fileService = new FileService(event.getGraphContext());
             FileModel model = fileService.frame(vertex);
+            processFileModel(model, ((String) setValue));
+        }
+    }
 
-            Map<String, List<Class<? extends WindupVertexFrame>>> mappings = FileMapping
-                        .getMappings(event);
-            for (Entry<String, List<Class<? extends WindupVertexFrame>>> entry : mappings.entrySet())
+    private void processFileModel(FileModel model, String name)
+    {
+        Map<String, List<Class<? extends WindupVertexFrame>>> mappings = FileMapping
+                    .getMappings(event);
+        for (Entry<String, List<Class<? extends WindupVertexFrame>>> entry : mappings.entrySet())
+        {
+            String pattern = entry.getKey();
+            List<Class<? extends WindupVertexFrame>> types = entry.getValue();
+
+            if (name.matches(pattern))
             {
-                String pattern = entry.getKey();
-                List<Class<? extends WindupVertexFrame>> types = entry.getValue();
-
-                if (((String) setValue).matches(pattern))
+                if (!model.isDirectory())
                 {
-                    if (!model.isDirectory())
+                    for (Class<? extends WindupVertexFrame> type : types)
                     {
-                        for (Class<? extends WindupVertexFrame> type : types)
-                        {
-                            GraphService.addTypeToModel(event.getGraphContext(), model, type);
-                        }
-                        LOG.fine("Mapped file [" + model.getFilePath() + "] matching pattern [" + pattern + "] to the following [" + types.size()
-                                    + "] types: " + types);
+                        GraphService.addTypeToModel(event.getGraphContext(), model, type);
                     }
+                    LOG.fine("Mapped file [" + model.getFilePath() + "] matching pattern [" + pattern + "] to the following [" + types.size()
+                                + "] types: " + types);
                 }
             }
+        }
+
+        for (FileModelListener listener : listeners)
+        {
+            listener.typeAdded(event.getGraphContext(), model);
+            listeners.release(listener);
         }
     }
 
@@ -91,5 +111,4 @@ public class FileMappingGraphChangedListener implements GraphChangedListener
     public void edgeRemoved(Edge edge, Map<String, Object> props)
     {
     }
-
 }

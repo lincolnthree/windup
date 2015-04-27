@@ -17,6 +17,7 @@ import java.util.zip.ZipFile;
 import org.apache.commons.lang3.StringUtils;
 import org.jboss.forge.furnace.util.OperatingSystemUtils;
 import org.jboss.forge.furnace.util.Streams;
+import org.jboss.forge.furnace.util.Strings;
 import org.jboss.windup.util.exception.WindupException;
 
 public class ZipUtil
@@ -89,24 +90,12 @@ public class ZipUtil
     public static String getEndsWithZipRegularExpression()
     {
         Set<String> zipExtensions = getZipExtensions();
-        final String regex;
-        if (zipExtensions.size() == 1)
-        {
-            regex = ".+\\." + zipExtensions.iterator().next() + "$";
-        }
-        else
-        {
-            StringBuilder builder = new StringBuilder();
-            builder.append("\\b(");
-            for (String value : zipExtensions)
-            {
-                builder.append("|");
-                builder.append(value);
-            }
-            builder.append(")\\b");
-            regex = ".+\\." + builder.toString() + "$";
-        }
-        return regex;
+        StringBuilder builder = new StringBuilder();
+        builder.append(".+\\.(");
+        builder.append(Strings.join(zipExtensions.toArray(new String[] {}), "|"));
+        builder.append(")$");
+
+        return builder.toString();
     }
 
     public static boolean endsWithZipExtension(String path)
@@ -131,6 +120,7 @@ public class ZipUtil
             extensions.add("jar");
             extensions.add("sar");
             extensions.add("rar");
+            extensions.add("zip");
             supportedExtensions = extensions;
         }
 

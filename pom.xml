@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -17,7 +18,7 @@
     <description>Migration Tools</description>
 
     <properties>
-        <version.furnace>2.15.4.Final</version.furnace>
+        <version.furnace>2.17.0.Final</version.furnace>
         <version.titangraph>0.5.4</version.titangraph>
         <version.tinkerpop.blueprints>2.5.0</version.tinkerpop.blueprints>
         <version.freemarker>2.3.20</version.freemarker>

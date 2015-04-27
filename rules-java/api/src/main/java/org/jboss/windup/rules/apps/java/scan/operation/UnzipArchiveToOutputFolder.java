@@ -63,7 +63,6 @@ public class UnzipArchiveToOutputFolder extends AbstractIterationOperation<Archi
             throw new WindupException("Input path doesn't point to a file: " + (zipFile == null ? "null" : zipFile.getAbsolutePath()));
         }
 
-        // create a folder for all archive contents
         WindupConfigurationModel cfg = WindupConfigurationService.getConfigurationModel(event.getGraphContext());
         String windupOutputFolder = cfg.getOutputPath().getFilePath();
 
@@ -89,7 +88,6 @@ public class UnzipArchiveToOutputFolder extends AbstractIterationOperation<Archi
         Path appArchiveFolder = Paths.get(tempFolder.toString(), appArchiveName);
 
         int fileIdx = 1;
-        // if it is already created, try another folder name
         while (Files.exists(appArchiveFolder))
         {
             appArchiveFolder = Paths.get(tempFolder.toString(), appArchiveName + "." + fileIdx);
@@ -104,7 +102,6 @@ public class UnzipArchiveToOutputFolder extends AbstractIterationOperation<Archi
     {
         final FileService fileService = new FileService(context);
 
-        // Setup a temp folder for the archive
         String appArchiveName = archiveModel.getArchiveName();
         if (null == appArchiveName)
             throw new IllegalStateException("Archive model doesn't have an archiveName: " + archiveModel.getFilePath());
@@ -121,9 +118,7 @@ public class UnzipArchiveToOutputFolder extends AbstractIterationOperation<Archi
                         + appArchiveName + "\" at \"" + appArchiveFolder.toString() + "\" due to: " + e.getMessage(), e);
         }
 
-        // unzip to the temp folder
-        LOG.info("Unzipping " + inputZipFile.getPath() + " to "
-                    + appArchiveFolder.toString());
+        LOG.info("Unzipping " + inputZipFile.getPath() + " to " + appArchiveFolder.toString());
         try
         {
             ZipUtil.unzipToFolder(inputZipFile, appArchiveFolder.toFile());
@@ -138,11 +133,9 @@ public class UnzipArchiveToOutputFolder extends AbstractIterationOperation<Archi
         }
 
         FileModel newFileModel = fileService.createByFilePath(appArchiveFolder.toString());
-        // mark the path to the archive
         archiveModel.setUnzippedDirectory(newFileModel);
         newFileModel.setParentArchive(archiveModel);
 
-        // add all unzipped files, and make sure their parent archive is set
         recurseAndAddFiles(context, tempFolder, fileService, archiveModel, newFileModel);
     }
 
@@ -169,7 +162,6 @@ public class UnzipArchiveToOutputFolder extends AbstractIterationOperation<Archi
                     FileModel subFileModel = fileService.createByFilePath(parentFileModel, subFile.getAbsolutePath());
                     subFileModel.setParentArchive(archiveModel);
 
-                    // check if this file should be ignored
                     if (checkIfIgnored(context, subFileModel, windupJavaConfigurationService.getIgnoredFileRegexes()))
                     {
                         continue;
@@ -186,7 +178,8 @@ public class UnzipArchiveToOutputFolder extends AbstractIterationOperation<Archi
                         archiveModel.addChildArchive(newArchiveModel);
 
                         /*
-                         * New archive must be reloaded in case the archive should be ignored
+                         * New archive must be reloaded in case the archive should be ignored, otherwise we will get
+                         * stale values.
                          */
                         newArchiveModel = GraphService.refresh(context, newArchiveModel);
                         if (!(newArchiveModel instanceof IgnoredArchiveModel))

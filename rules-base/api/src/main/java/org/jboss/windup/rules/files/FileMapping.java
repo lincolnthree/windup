@@ -5,16 +5,17 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
+
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
-
+import org.jboss.forge.furnace.services.Imported;
 import org.jboss.forge.furnace.util.Assert;
 import org.jboss.windup.config.GraphRewrite;
 import org.jboss.windup.config.GraphRule;
 import org.jboss.windup.config.PreRulesetEvaluation;
+import org.jboss.windup.config.furnace.FurnaceHolder;
 import org.jboss.windup.config.phase.ArchiveMetadataExtractionPhase;
 import org.jboss.windup.graph.model.WindupVertexFrame;
 import org.jboss.windup.graph.model.resource.FileModel;
@@ -26,8 +27,8 @@ import org.ocpsoft.rewrite.context.EvaluationContext;
 
 /**
  * Maps file extensions to {@link WindupVertexFrame} types. Mappings are always applied during the
- * {@link ArchiveMetadataExtractionPhase} phase, no matter where this rule appears in the pipeline. The following example
- * demonstrates how to match files ending with *.xml to a frame type:
+ * {@link ArchiveMetadataExtractionPhase} phase, no matter where this rule appears in the pipeline. The following
+ * example demonstrates how to match files ending with *.xml to a frame type:
  *
  * <pre>
  *   {@link FileMapping}.from(".*\\.xml").to({@link XmlFileModel}.class)
@@ -51,8 +52,8 @@ public class FileMapping extends GraphRule implements PreRulesetEvaluation, File
 
         String normalizedPattern = StringUtils.replacePattern(pattern.pattern(), "\\s", "_");
         normalizedPattern = StringUtils.substring(normalizedPattern, 0, 10);
-        this.id = this.getClass().getSimpleName()+ "_" + normalizedPattern
-                + "_" + RandomStringUtils.randomAlphanumeric(2);
+        this.id = this.getClass().getSimpleName() + "_" + normalizedPattern
+                    + "_" + RandomStringUtils.randomAlphanumeric(2);
     }
 
     /**
@@ -84,36 +85,34 @@ public class FileMapping extends GraphRule implements PreRulesetEvaluation, File
     public void preRulesetEvaluation(GraphRewrite event)
     {
         LOG.info("Added " + toString());
+
+        String regex = pattern.pattern();
         for (Class<? extends WindupVertexFrame> type : types)
         {
-            addMapping(event, pattern.pattern(), type);
+            addMapping(event, regex, type);
         }
 
         /*
          * Handle mapping any files that were directly inserted in the graph before this executed.
          */
-        Map<String, List<Class<? extends WindupVertexFrame>>> mappings = FileMapping
-                    .getMappings(event);
-
         FileService fileService = new FileService(event.getGraphContext());
-        for (Entry<String, List<Class<? extends WindupVertexFrame>>> entry : mappings.entrySet())
+        Iterable<FileModel> models = fileService.findAllByPropertyMatchingRegex(FileModel.FILE_PATH, regex);
+        Imported<FileModelListener> listeners = FurnaceHolder.getAddonRegistry().getServices(FileModelListener.class);
+
+        for (FileModel model : models)
         {
-            String pattern = entry.getKey();
-            List<Class<? extends WindupVertexFrame>> types = entry.getValue();
-
-            Iterable<FileModel> models = fileService.findAllByPropertyMatchingRegex(
-                        FileModel.FILE_PATH, pattern);
-
-            for (FileModel model : models)
+            if (!model.isDirectory())
             {
-                if (!model.isDirectory())
+                for (Class<? extends WindupVertexFrame> type : types)
                 {
-                    for (Class<? extends WindupVertexFrame> type : types)
-                    {
-                        GraphService.addTypeToModel(event.getGraphContext(), model, type);
-                    }
-                    LOG.info("Mapped file [" + model.getFilePath() + "] matching pattern [" + pattern + "] to the following [" + types.size()
-                                + "] types: " + types);
+                    GraphService.addTypeToModel(event.getGraphContext(), model, type);
+                }
+                LOG.info("Mapped file [" + model.getFilePath() + "] matching pattern [" + pattern + "] to the following [" + types.size()
+                            + "] types: " + types);
+
+                for (FileModelListener listener : listeners)
+                {
+                    listener.typeAdded(event.getGraphContext(), model);
                 }
             }
         }

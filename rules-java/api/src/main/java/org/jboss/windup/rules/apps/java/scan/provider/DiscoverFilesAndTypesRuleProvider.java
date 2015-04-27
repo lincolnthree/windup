@@ -6,13 +6,10 @@ import org.jboss.windup.config.metadata.MetadataBuilder;
 import org.jboss.windup.config.phase.DiscoveryPhase;
 import org.jboss.windup.config.query.Query;
 import org.jboss.windup.config.query.QueryGremlinCriterion;
-import org.jboss.windup.config.query.QueryPropertyComparisonType;
 import org.jboss.windup.graph.GraphContext;
 import org.jboss.windup.graph.model.WindupConfigurationModel;
 import org.jboss.windup.graph.model.resource.FileModel;
-import org.jboss.windup.rules.apps.java.scan.operation.AddArchiveReferenceInformation;
 import org.jboss.windup.rules.apps.java.scan.operation.RecurseDirectoryAndAddFiles;
-import org.jboss.windup.util.ZipUtil;
 import org.ocpsoft.rewrite.config.Configuration;
 import org.ocpsoft.rewrite.config.ConfigurationBuilder;
 
@@ -46,19 +43,7 @@ public class DiscoverFilesAndTypesRuleProvider extends AbstractRuleProvider
                         }
                     })
         )
-        .perform(new RecurseDirectoryAndAddFiles()
-        )
-
-        .addRule()
-        .when(Query.fromType(FileModel.class)
-            .withProperty(FileModel.IS_DIRECTORY, false)
-            .withProperty(FileModel.FILE_PATH,
-                QueryPropertyComparisonType.REGEX,
-                ZipUtil.getEndsWithZipRegularExpression())
-        )
-        .perform(
-           new AddArchiveReferenceInformation()
-        );
+        .perform(new RecurseDirectoryAndAddFiles().commitEvery(100));
     }
     // @formatter:on
 }
