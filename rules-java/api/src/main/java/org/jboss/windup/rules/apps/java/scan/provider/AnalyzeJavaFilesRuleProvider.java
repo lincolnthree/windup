@@ -95,6 +95,8 @@ public class AnalyzeJavaFilesRuleProvider extends AbstractRuleProvider
 
     private final class ParseSourceOperation extends GraphOperation
     {
+        private static final int ANALYSIS_QUEUE_SIZE = 5000;
+
         final Map<Path, JavaSourceFileModel> sourcePathToFileModel = new TreeMap<>();
 
         public void perform(final GraphRewrite event, EvaluationContext context)
@@ -149,7 +151,7 @@ public class AnalyzeJavaFilesRuleProvider extends AbstractRuleProvider
                     final int totalToProcess = allSourceFiles.size();
                     final AtomicInteger numberProcessed = new AtomicInteger(0);
 
-                    final BlockingQueue<Pair<Path, List<ClassReference>>> processedPaths = new ArrayBlockingQueue<>(1000);
+                    final BlockingQueue<Pair<Path, List<ClassReference>>> processedPaths = new ArrayBlockingQueue<>(ANALYSIS_QUEUE_SIZE);
                     final Set<Path> failedPaths = Sets.getConcurrentSet();
                     BatchASTListener listener = new BatchASTListener()
                     {
@@ -181,6 +183,7 @@ public class AnalyzeJavaFilesRuleProvider extends AbstractRuleProvider
 
                     while (!future.isDone() || !processedPaths.isEmpty())
                     {
+                        LOG.info("Queue size: " + processedPaths.size() + " / " + ANALYSIS_QUEUE_SIZE);
                         Pair<Path, List<ClassReference>> pair = processedPaths.poll(1000, TimeUnit.SECONDS);
                         processReferences(event.getGraphContext(), pair.getKey(), pair.getValue());
                         if (numberProcessed.get() % LOG_INTERVAL == 0)
@@ -202,7 +205,6 @@ public class AnalyzeJavaFilesRuleProvider extends AbstractRuleProvider
                         classificationService.attachClassification(sourceFileModel, JavaSourceFileModel.UNPARSEABLE_JAVA_CLASSIFICATION,
                                     JavaSourceFileModel.UNPARSEABLE_JAVA_DESCRIPTION);
                     }
-
 
                     if (!filesToProcess.isEmpty())
                     {
@@ -228,7 +230,6 @@ public class AnalyzeJavaFilesRuleProvider extends AbstractRuleProvider
                             }
                         }
                     }
-
 
                     if (!filesToProcess.isEmpty())
                     {
