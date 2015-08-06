@@ -175,7 +175,7 @@ public interface FileModel extends ResourceModel
     @JavaHandler
     String getPrettyPathWithinProject();
 
-    abstract class Impl implements FileModel, JavaHandlerContext<Vertex>
+    public abstract class Impl implements FileModel, JavaHandlerContext<Vertex>
     {
         public String getPrettyPathWithinProject()
         {
